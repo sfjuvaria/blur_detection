@@ -99,6 +99,7 @@ for ind, img_path in enumerate(img_list):
     shp = np.shape(img)
     size = width * height   
     
+    imsg = rgb2gray(ims)
     im = rgb2gray(im)
     im = normalize(im)
     acmo = ACMO(im)
@@ -116,6 +117,8 @@ for ind, img_path in enumerate(img_list):
 
 # Sort the list based on size of the images
 df_sorted = df.sort_values(by='size', ascending= True)
+df_sorted
+
 # Select 100 sample images
 dfr = df_sorted.sample(n=100)
 # # Sort the list based on size of the images
@@ -127,6 +130,15 @@ dfr_index.plot(x='size', y='lapv')
 dfr_index.plot(x='size', y='bren')
 dfr_index.plot(x='size', y='acmo')
 
+# Convert into series format to plot
+arr_size = df_sorted['size']
+arr_lapv = df_sorted['lapv']
+
+ts = pd.Series(np.random.randn(10000), index = pd.size())
+n = arr_size.size
+nr = dfr_index.size
+arr_idx = (np.argsort(arr_size).uniform(0,n)).astype(int)
+arr_sorted = arr_size[arr_idx]
 
 # df_a = dfr_sorted.set_index(all, append=True)
 with pd.ExcelWriter('data.xlsx') as writer:
