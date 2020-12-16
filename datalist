@@ -1,0 +1,52 @@
+"""
+Created on Wed Dec 16 13:08:57 2020
+@author: JuvariaSyeda
+"""
+import os
+from os.path import join
+
+def simplefolder(datafolder):
+    img_list = []
+    for roots, _, files in os.walk(data_dir):
+        for file in files:
+            img_path = os.path.join(roots, file)
+            img_list.append(img_path)
+    return img_list
+
+def simpleimagefolder(datafolder):
+    img_list = []
+    for roots, _, files in os.walk(data_dir):
+        for file in files:
+            if file.endswith(".JPG"):
+                img_path = os.path.join(roots, file)
+                img_list.append(img_path)
+            if file.endswith(".jpg"):
+                img_path = os.path.join(roots, file)
+                img_list.append(img_path)
+    return img_list
+
+def nestedfolder(datafolder):
+    img_list = []
+    dir_list = []
+    for roots, directories, files in os.walk(data_dir):
+        for file in files:
+            if file.endswith(".JPG"):
+                img_path = os.path.join(roots, file)
+                img_list.append(img_path)
+            if file.endswith(".jpg"):
+                img_path = os.path.join(roots, file)
+                img_list.append(img_path)
+        for dirs in directories:
+            dir_list.append(dirs)
+    return img_list,dir_list
+
+# Load data directory folder
+data_dir = '/home/new/Documents/data_cropped/png/CounterfeitAnalysis/2016-2019CAM_CROP1/bch'
+
+il_all = simplefolder(data_dir)
+il = simpleimagefolder(data_dir)
+il,dl = nestedfolder(data_dir)
+
+print(len(il_all))
+print(len(il))
+print(len(dl))
