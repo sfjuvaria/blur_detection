@@ -2,12 +2,7 @@
 Created on Wed Dec 16 14:39:19 2020
 @author: new
 """
-import pathlib
 from pathlib import Path
-
-import numpy as np
-from skimage import data
-import matplotlib.pyplot as plt
 
 def listpaths(data_dir):
   img_list = []
