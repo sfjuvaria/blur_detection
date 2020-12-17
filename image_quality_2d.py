@@ -4,7 +4,7 @@ Created on Wed Dec 16 18:02:45 2020
 """
 import os
 import numpy as np
-# import pandas as pd
+import pandas as pd
 import skimage
 from skimage import io
 import matplotlib.pyplot as plt                          
@@ -24,8 +24,8 @@ def image_info(image_files):
     return w,h
 
 def images_info(image_files):
-    w = np.zeros((len(image_files), 1), dtype=int)
-    h = np.zeros((len(image_files), 1), dtype=int)
+    w = np.zeros((len(image_files),), dtype=int)
+    h = np.zeros((len(image_files),), dtype=int)
     for i in range(len(image_files)):
         im = io.imread(image_files[i])
         # TODO: add if for gray vs RGB
@@ -34,13 +34,13 @@ def images_info(image_files):
             
     return w, h
 
-def scatterplot(num_imgs, sizes, title, xlabel, ylabel,plotname):
+def scatterplot(num_imgs, size, title, xlabel, ylabel,plot_file):
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.scatter(num_imgs,sizes)
+    plt.scatter(num_imgs,size)
     plt.show()
-    plt.savefig(plotname)
+    plt.savefig(plot_file)
 
 if __name__ == '__main__':
 
@@ -60,4 +60,33 @@ if __name__ == '__main__':
     # Calc image size
     size = width * height
     
-   
+    # Add data list + size array into single list
+    # datasizes = np.column_stack((data,size))
+    df = pd.DataFrame()
+    df['image_files']  = image_files
+    df['size']  = size
+    df['width']  = width
+    df['height'] = height
+    
+    # list(zip(lis,list 2, ...))
+    # # Convert this list into pandas table for sorting
+    # d = list(zip(image_files, width.tolist(), height.tolist(), size.tolist()))
+    # df = pd.DataFrame(d,columns=['filepath', 'width', 'height', 'size'])
+    # df = pd.DataFrame([image_files, width, height, size], columns=['filepath', 'width', 'height', 'size'])
+    # # df = pd.DataFrame(image_files, datasizes, columns = ['filepath', 'width', 'height', 'size'])
+    # Sort the list based on size of the images
+    df_sorted = df.sort_values(by='size', ascending= True)
+    
+    # Convert table to numpy
+    data_values = df_sorted.values
+    
+    # for single column conversion
+    size = df_sorted[['size']].to_numpy()
+    
+    # Plot graph between size and num of images
+    num_imgs = np.arange(len(data_values))
+    title = 'Scatter plot of image sizes'
+    xlabel = 'Image index'
+    ylabel = 'Sorted image sizes'
+    plot_file = 'scatter1.png'
+    scatterplot(num_imgs, size, title, xlabel, ylabel, plot_file)
