@@ -2,68 +2,107 @@
 Created on Wed Dec 16 18:02:45 2020
 @author: JSyeda
 """
+
 import os
+import shutil
 import numpy as np
 import pandas as pd
-import skimage
+import matplotlib.pyplot as plt
 from skimage import io
-import matplotlib.pyplot as plt 
-from scipy.ndimage import laplace       
-from skimage.filters import sobel_h, sobel_v     
+from skimage.filters import sobel_h, sobel_v, laplace
+from skimage.color import rgb2gray, rgb2lab
+from skimage.transform import rescale
+from scipy.stats import pearsonr, spearmanr
+from scipy.ndimage import gaussian_filter
 
-def findfiles(which, where='.'):
+def normalize(x):
+  return (x - x.min()) / (x.max() - x.min())
+
+def find_files(which, where='.'):
   file_paths = []
-  for dirpath, dirs, files in os.walk(where):
-    for filename in files: 
-      fname = os.path.join(dirpath,filename) 
+  for dirpath, _, files in os.walk(where):
+    for filename in files:
+      fname = os.path.join(dirpath,filename)
       if fname.lower().endswith(which):
         file_paths.append(fname)
   return file_paths
 
-def image_info(image_files):
-    im = skimage.io.imread(image_files)
-    w, h, _ = im.shape
-    lapv = LAPV(im)
-    # bren = BREN(im)
-    return w, h, lapv
+def image_info(image_file):
+  w = np.zeros((len(image_file),), dtype=int)
+  h = np.zeros((len(image_file),), dtype=int)
+  s = np.zeros((len(image_file),), dtype=int)
+  for i in range(len(image_file)):
+    im = io.imread(image_file[i])
+    if len(im.shape)==3:
+      im = rgb2gray(im)
+    h[i], w[i] = im.shape
+    s[i] = w[i] * h[i]
+  return w, h, s
 
-def images_info(image_files):
-    w = np.zeros((len(image_files),), dtype=int)
-    h = np.zeros((len(image_files),), dtype=int)
-    lapv = np.zeros((len(image_files),), dtype=float)
-    # bren = np.zeros((len(image_files),), dtype=float)
-    teng = np.zeros((len(image_files),), dtype=float)
-    for i in range(len(image_files)):
-        im = io.imread(image_files[i])
-        # TODO: add if for gray vs RGB
-        # if (len(im.shape)==3):
-        w[i], h[i], _ = im.shape
-        lapv[i] = LAPV(im)
-        # bren[i] = BREN(im)      
-        # teng[i] = TENG(im)
-    return w, h, lapv
+def image_stats(image_file, w, h):
+  lapv = np.zeros((len(image_file),), dtype=float)
+  gder = np.zeros((len(image_file),), dtype=float)
+  teng = np.zeros((len(image_file),), dtype=float)
+  glva = np.zeros((len(image_file),), dtype=float)
+  for i in range(len(image_file)):
+    im = io.imread(image_file[i])
+    if len(im.shape)==3:
+      im = rgb2gray(im)
+      #imlab = rgb2lab(im)
+      #im = imlab[:,:,0]
+    scale = h.min()/h[i]
+    im = rescale(im, scale)
+    # im = normalize(im)
+    im = (im - 0.485)/0.229 # from pytorch
+    lapv[i] = LAPV(im)
+    gder[i] = GDER(im)
+    teng[i] = TENG(im)
+    glva[i] = GLVA(im)
+  return lapv, gder, teng, glva
 
-def scatterplot(q, s, title, xlabel, ylabel,plot_file):
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.scatter(q, s)
-    # plt.grid(True)
-    plt.show()
+def plot_scatter(x, y, title='', xlabel='', ylabel='', plot_file=''):
+  plt.scatter(x, y)
+  plt.xlabel(xlabel)
+  plt.ylabel(ylabel)
+  plt.title(title)
+  if plot_file != '':
     plt.savefig(plot_file)
+  plt.show()
 
-def plot_images(p,v):
-    fig, axs = plt.subplots(1,nr, figsize=(25,5))
-    fig.subplots_adjust(hspace = 0.5, wspace=.1)  
-    for i in range(len(p)):
-        im = io.imread(p[i])
-        axs[i].imshow(im)
-        axs[i].set_title(v[i])      
-        axs[i].axis('off')           
-    # plt.axes("off")   
-    plt.tight_layout()
-    plt.show()
-    plt.savefig('img_plots.png')
+def plot_scatter_cmap(x, y, m, title='', xlabel='', ylabel='', plot_file=''):
+  cm = plt.get_cmap('jet')
+  norm = plt.Normalize(vmin=m.min(), vmax=m.max())
+  plt.scatter(x, y, c=m, cmap=cm, norm=norm)
+  plt.xlabel(xlabel)
+  plt.ylabel(ylabel)
+  plt.title(title)
+  plt.colorbar()
+  if plot_file != '':
+    plt.savefig(plot_file)
+  plt.show()
+
+def plot_images(p, v, c=3, plot_file=''):
+  # Subplots are organized in a Rows x Cols Grid
+  # Tot and Cols are known
+  t = len(v)
+  # Compute Rows required
+  r = t // c
+  r += t % c
+  # Create a Position index
+  pos = range(1, t + 1)
+
+  fig = plt.figure()
+  fig.subplots_adjust(hspace = 0.5, wspace=.1)
+  for i in range(t):
+    im = io.imread(p[i])
+    ax = fig.add_subplot(r, c, pos[i])
+    ax.imshow(im)
+    ax.set_title(v[i])
+    ax.axis('off')
+  plt.tight_layout()
+  if plot_file != '':
+    plt.savefig(plot_file)
+  plt.show()
 
 def LAPV(im):
   # Variance of laplacian (Pech2000)
@@ -71,17 +110,11 @@ def LAPV(im):
   fm = fm.std()**2
   return fm
 
-# def BREN(im):
-#   # Brenner's (Santos97)
-#   (m, n) = im.shape
-#   dh = np.zeros((m, n))
-#   dv = np.zeros((m, n))
-#   dv[0:m-2,:] = im[2:,:] - im[0:-2,:]
-#   dh[:,0:n-2] = im[:,2:] - im[:,0:-2]
-#   fm = np.maximum(dh, dv)
-#   fm = fm**2
-#   fm = fm.mean()
-#   return fm
+def GDER(im, s=3):
+  # Gaussian derivative (Geusebroek2000)
+  fm = gaussian_filter(im, sigma=s, order=1)
+  fm = fm.mean()
+  return fm
 
 def TENG(im):
   # Tenengrad (Krotkov86)
@@ -90,91 +123,153 @@ def TENG(im):
   fm = gx**2 + gy**2
   fm = fm.mean()
   return fm
-       
+
+def GLVA(im):
+  # Graylevel variance (Krotkov86)
+  fm = im.std()
+  return fm
+
+
+def data_correlation(a, b):
+  # -1.00. A perfect negative (downward sloping) linear relationship
+  # -0.70. A strong negative (downward sloping) linear relationship
+  # -0.50. A moderate negative (downhill sloping) relationship
+  # -0.30. A weak negative (downhill sloping) linear relationship
+  #  0.00. No linear relationship
+  # +0.30. A weak positive (upward sloping) linear relationship
+  # +0.50. A moderate positive (upward sloping) linear relationship
+  # +0.70. A strong positive (upward sloping) linear relationship
+  # +1.00. A perfect positive (upward sloping) linear relationship
+
+  # Calculate Pearson's correlation
+  corr_p, _ = pearsonr(a, b)
+  # Calculate spearman's correlation
+  corr_s, _ = spearmanr(a, b)
+  return corr_p, corr_s
+
+def stats_info(x):
+  print('Min: ' + str(x.min()))
+  print('Mean: ' + str(x.mean()))
+  print('Max: ' + str(x.max()))
+  print('Ratio: ' + str(x.max()/x.min()))
+
+def plot_image(im):
+  # create figure
+  fig = plt.figure(figsize=(10, 10))
+  ax = fig.add_subplot(111)
+
+  # add image
+  cmap = plt.cm.get_cmap('jet')
+  # cmap.set_bad(color='black') # does not work - fix it
+  # ax.imshow(im, cmap=cmap, interpolation='none')
+  cs = ax.imshow(im, cmap=cmap)
+  #ax.imshow(im, cmap=cmap)
+  plt.colorbar(cs)
+
+  # hide axis
+  plt.axis('off')
+
+  # show
+  # plt.show()
+
+def find_string_loc(strings, match):
+  idx = -1
+  for i, s in enumerate(strings):
+    if match in s:
+      idx = i
+  return idx
+
 if __name__ == '__main__':
 
-    # Load data directory folder
-    data_dir = '/home/new/Documents/data_imgs'
-    
-    # Load data directory with nested folders
-    # data_dir = '/home/new/Documents/data_cropped/png/CounterfeitAnalysis/2016-2019CAM_CROP1/acf'
-    
-    # Returns list of jpg filepaths in a folder 
-    image_files = findfiles('.jpg', data_dir)
-    print(image_files)
-    
-    # Call the data loop function to read, width, height info
-    width, height, lapvs = images_info(image_files)
-    
-    # Calc image size
-    sizes = width * height
-    
-    # Convert this list into pandas table for sorting
-    df = pd.DataFrame()
-    df['image_files']  = image_files
-    df['size']  = sizes
-    df['width']  = width
-    df['height'] = height
-    df['LAPV'] = lapvs
-    # df['BREN'] = brens
-    # df['TENG'] = teng
-    
-    # Sort the list based on size of the images
-    # df_sorted = df.sort_values(by='size', ascending= True)
-    df_lapv = df.sort_values(by='LAPV', ascending= True)
-    # df_bren = df.sort_values(by='BREN', ascending= True)
-    # df_teng = df.sort_values(by='TENG', ascending= True)
-    
-    # # Convert full table to numpy
-    # data_values = df_sorted.values
-    
-    # # for single column conversion for size
-    # image_file = df_sorted[['image_files']].to_numpy()
-    # size = df_sorted[['size']].to_numpy()
-    # lapv = df_sorted[['LAPV']].to_numpy()
-    # # To remove brackets
-    # image_file = np.squeeze(image_file)
-    # size = np.squeeze(size)
-    # lapv = np.squeeze(lapv)
-    
-    # for single column conversion for lapv
-    image_file = df_lapv[['image_files']].to_numpy()
-    size = df_lapv[['size']].to_numpy()
-    lapv = df_lapv[['LAPV']].to_numpy()
-    # To remove brackets
-    image_file = np.squeeze(image_file)
-    size = np.squeeze(size)
-    lapv = np.squeeze(lapv)
-    
-    # # for single column conversion for bren
-    # image_file = df_bren[['image_files']].to_numpy()
-    # bren = df_bren[['BREN']].to_numpy()
-    # # To remove brackets
-    # image_file = np.squeeze(image_file)
-    # bren = np.squeeze(bren)
-    
-    # # for single column conversion for teng
-    # image_file = df_teng[['image_files']].to_numpy()
-    # teng = df_teng[['TENG']].to_numpy()
-    # # To remove brackets
-    # image_file = np.squeeze(image_file)
-    # teng = np.squeeze(teng)
-    
-    # # Plot graph between size and num of images
-    # num_imgs = np.arange(len(image_file))
-    # title = 'Scatter plot of image lapv'
-    # xlabel = 'Lapv'
-    # ylabel = 'Image size'
-    # plot_file = 'scatter1_lapv.png'
-    # scatterplot(lapv, size, title, xlabel, ylabel, plot_file)
-    
-    fig = plt.figure() 
-    n = len(image_files)  #  10000 # number of all images
-    nr = 9 # number of random images 
-    id = (np.random.uniform(0,n,nr)).astype(int) # image index
-    id = np.unique(id) # make sure that they are unique id'
-    random_files = image_file[id]
-    # random_sizes = size[id]
-    random_lapvs = lapv[id]
-    plot_images(random_files, random_lapvs)
-    
+  # Image data directory folder
+  # data_dir = '/home/new/Documents/data_cropped/png/CounterfeitAnalysis/2016-2019CAM_CROP1/bch'
+  # data_dir = '/home/new/Documents/data_cropped/png/CounterfeitAnalysis/2020_test/Android'
+  data_dir = '/home/new/Documents/data_cropped/EXP_0729/train'
+  
+  # Returns list of jpg file paths in a folder
+  image_file = find_files('.jpg', data_dir)
+  # print(image_file)
+
+  # Image file width, height, and size info
+  width, height, size = image_info(image_file)
+  # print(size)
+
+  # Image quality measurements
+  lapv, gder, teng, glva = image_stats(image_file, width, height)
+
+  # Image quality measure
+  iq = (normalize(lapv) + normalize(gder) + normalize(teng) + normalize(glva))/4
+  iq = normalize(iq)
+
+  # Convert this list into pandas table for sorting
+  df = pd.DataFrame()
+  df['image_file'] = image_file
+  df['width'] = width
+  df['height'] = height
+  df['size'] = size
+  df['iq'] = iq
+
+  # Sort the list based on iq of the images
+  df = df.sort_values(by='iq', ascending= True)
+
+  # Convert table column to numpy vector
+  image_file = df[['image_file']].to_numpy()
+  width = df[['width']].to_numpy()
+  height = df[['height']].to_numpy()
+  size = df[['size']].to_numpy()
+  iq = df[['iq']].to_numpy()
+  image_file = np.squeeze(image_file) # remove singleton dimention
+  width = np.squeeze(width)
+  height = np.squeeze(height)
+  size = np.squeeze(size)
+  iq = np.squeeze(iq)
+
+  # Calculate correlation
+  corr_p, corr_s = data_correlation(size, iq)
+  print('Pearsons correlation: %.3f' % corr_p)
+  print('Spearmans correlation: %.3f' % corr_s)
+  # plot_scatter(height, iq, 'Height vs IQ', 'Height', 'IQ')
+  # plot_scatter_cmap(np.arange(len(image_file)), iq, height, 'Height vs IQ - cmap', 'Images', 'IQ')
+
+  # Plot image quality
+  plot_scatter(np.arange(len(image_file)), iq, 'Images vs IQ', 'Images', 'IQ')
+
+  # Plot images with low, mid and high IQ
+  nr = 10 # number of random images
+  n = len(image_file) # number of all images
+  id = np.arange(0, nr)
+  plot_images(image_file[id], np.round(iq[id],5))
+  id = np.arange(int(n/2)-nr, int(n/2))
+  plot_images(image_file[id], np.round(iq[id],5))
+  id = np.arange(n-nr, n)
+  plot_images(image_file[id], np.round(iq[id],5))
+
+  data_dir_hq = data_dir + '__HQ'
+  data_dir_lq = data_dir + '__LQ'
+  # create dirs and prepare
+  if os.path.exists(data_dir_hq):
+      shutil.rmtree(data_dir_hq)
+  if os.path.exists(data_dir_lq):
+      shutil.rmtree(data_dir_lq)
+  os.mkdir(data_dir_lq)
+  # copy data
+  destination = shutil.copytree(data_dir, data_dir_hq)
+  # clean data
+  image_file_lq = image_file[iq<0.15]
+  for i in range(len(image_file_lq)):
+     dir_name, file_name = os.path.split(image_file_lq[i])
+     dir_name = dir_name.replace(data_dir, data_dir_hq)
+     shutil.move(os.path.join(dir_name, file_name), os.path.join(data_dir_lq, file_name))
+  # Save
+  df.to_csv(os.path.join(data_dir, 'image_quality.csv'))
+
+# # Find files in folders
+#   csv_dir = '/home/new/Documents'
+#   csv_file = find_files('.csv', csv_dir)
+#   cf = len(csv_file)
+#   imgs_num = np.zeros((cf,), dtype=int)
+#   # imgs_num = np.array(cf)
+  
+#   for i in range(len(csv_file)):
+#      df_csv = pd.read_csv(csv_file[i]) 
+#      imgs_num[i] = len(df_csv.index)
